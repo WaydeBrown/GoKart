@@ -1,5 +1,15 @@
 
+# see I2C devices terminal: sudo i2cdetect -y 1
+# I2C number 68
 
+import smbus
+from time import sleep
+
+
+DEVICE_BUS = 1
+
+bus = smbus.SMBus(DEVICE_BUS)
+# bus.write_byte_data(DEVICE_ADDR, )
 
 
 
@@ -373,43 +383,73 @@ def initialise():
     setClockSource(MPU6050_CLOCK_PLL_XGYRO)
     setFullScaleGyroRange(MPU6050_GYRO_FS_250)
     setFullScaleAccelRange(MPU6050_ACCEL_FS_2)
-    setSleepEnabled(False)
+    # read mag
+    bus.write_byte_data(devAddr, MPU6050_RA_INT_PIN_CFG,
+                        0x02)  # set i2c bypass enable pin to true to access magnetometer
+    sleep(0.01)
+
+    bus.write_byte_data(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x01)  # enable the magnetometer
+    sleep(0.01)
+    #setSleepEnabled(False)
 
 
 def setClockSource(source):
-    writeBits(devAddr, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH, source)
+    # source = bus.write_byte_data(devAddr, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH)
+    # bit_buffer = bus.read_byte_data(devAddr, MPU6050_RA_PWR_MGMT_1)
 
+
+    bus.write_byte_data(devAddr, MPU6050_RA_PWR_MGMT_1, 0b00000001) # 0b00000001 hardcoded bit see doc
 
 def setFullScaleGyroRange(myRange):
-    writeBits(devAddr, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, myRange)
+    bus.write_byte_data(devAddr, MPU6050_RA_GYRO_CONFIG, 0b00011000) # 0b00000000 hardcoded bit see doc
 
 
 def setFullScaleAccelRange (myRange):
-    writeBits(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_AFS_SEL_BIT, MPU6050_ACONFIG_AFS_SEL_LENGTH, myRange)
+    bus.write_byte_data(devAddr, MPU6050_RA_ACCEL_CONFIG, 0b00011000) # 0b00000000 hardcoded bit see doc
 
-
-def setSleepEnabled (enabled):
-    writeBit(devAddr, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_SLEEP_BIT, enabled)
 
 
 def getMotion9 ():
-
-    readBytes(devAddr, MPU6050_RA_ACCEL_XOUT_H, 14, buffer)
-    ax = (buffer[0] << 8) | buffer[1]
-    ay = (buffer[2] << 8) | buffer[3]
-    az = (buffer[4] << 8) | buffer[5]
-    gx = (buffer[8] << 8) | buffer[9]
-    gy = (buffer[10] << 8) | buffer[11]
-    gz = (buffer[12] << 8) | buffer[13]
+    bit_buffer = bus.read_i2c_block_data(devAddr, MPU6050_RA_ACCEL_XOUT_H, 14)
+    d = dict()
+    d["ax"] = (bit_buffer[0] << 8) | bit_buffer[1]
+    d["ay"] = (bit_buffer[2] << 8) | bit_buffer[3]
+    d["az"] = (bit_buffer[4] << 8) | bit_buffer[5]
+    d["gx"] = (bit_buffer[8] << 8) | bit_buffer[9]
+    d["gy"] = (bit_buffer[10] << 8) | bit_buffer[11]
+    d["gz"] = (bit_buffer[12] << 8) | bit_buffer[13]
 
     # read mag
-    writeByte(devAddr, MPU6050_RA_INT_PIN_CFG, 0x02) # set i2c bypass enable pin to true to access magnetometer
-    delay(10)
+    bus.write_byte_data(devAddr, MPU6050_RA_INT_PIN_CFG, 0x02) # set i2c bypass enable pin to true to access magnetometer
+    sleep(0.01)
 
-    writeByte(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x01) # enable the magnetometer
-    delay(10)
+    bus.write_byte_data(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x01) # enable the magnetometer
+    sleep(0.01)
 
-    readBytes(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_XOUT_L, 6, buffer)
-    mx = (buffer[1] << 8) | buffer[0]
-    my = (buffer[3] << 8) | buffer[2]
-    mz = (buffer[5] << 8) | buffer[4]
+    bit_buffer = bus.read_i2c_block_data(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_XOUT_L, 6)
+    d["mx"] = (bit_buffer[1] << 8) | bit_buffer[0]
+    d["my"] = (bit_buffer[3] << 8) | bit_buffer[2]
+    d["mz"] = (bit_buffer[5] << 8) | bit_buffer[4]
+
+    return d
+
+
+def main():
+    initialise()
+    for i in range(10000):
+        data = getMotion9()
+        print   "ax: " + str(data["ax"]) + "\t\t" + \
+                "ay: " + str(data["ay"]) + "\t\t" + \
+                "az: " + str(data["az"]) + "\t\t" + \
+                "gx: " + str(data["gx"]) + "\t\t" + \
+                "gy: " + str(data["gy"]) + "\t\t" + \
+                "gz: " + str(data["gz"]) + "\t\t" + \
+                "mx: " + str(data["mx"]) + "\t\t" + \
+                "my: " + str(data["my"]) + "\t\t" + \
+                "mz: " + str(data["mz"]) + "\t\t"
+
+        i += 1
+
+
+if __name__ == "__main__":
+    main()
