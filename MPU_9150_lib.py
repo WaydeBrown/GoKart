@@ -4,6 +4,8 @@
 
 import smbus
 from time import sleep
+from machine import i2c
+
 
 
 DEVICE_BUS = 1
@@ -376,16 +378,15 @@ MPU6050_DMP_MEMORY_BANKS        =8
 MPU6050_DMP_MEMORY_BANK_SIZE    =256
 DMP_MEMORY_CHUNK_SIZE = 16
 
-
 devAddr = MPU6050_DEFAULT_ADDRESS
+
 
 def initialise():
     setClockSource(MPU6050_CLOCK_PLL_XGYRO)
     setFullScaleGyroRange(MPU6050_GYRO_FS_250)
     setFullScaleAccelRange(MPU6050_ACCEL_FS_2)
     # read mag
-    bus.write_byte_data(devAddr, MPU6050_RA_INT_PIN_CFG,
-                        0x02)  # set i2c bypass enable pin to true to access magnetometer
+    bus.write_byte_data(devAddr, MPU6050_RA_INT_PIN_CFG, 0x02)  # set i2c bypass enable pin to true to access magnetometer
     sleep(0.01)
 
     bus.write_byte_data(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x01)  # enable the magnetometer
@@ -394,6 +395,7 @@ def initialise():
 
 
 def setClockSource(source):
+    writeBits(devAddr, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH, source)
     # source = bus.write_byte_data(devAddr, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH)
     # bit_buffer = bus.read_byte_data(devAddr, MPU6050_RA_PWR_MGMT_1)
 
@@ -401,12 +403,63 @@ def setClockSource(source):
     bus.write_byte_data(devAddr, MPU6050_RA_PWR_MGMT_1, 0b00000001) # 0b00000001 hardcoded bit see doc
 
 def setFullScaleGyroRange(myRange):
-    bus.write_byte_data(devAddr, MPU6050_RA_GYRO_CONFIG, 0b00011000) # 0b00000000 hardcoded bit see doc
+    writeBits(devAddr, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, myRange)
+
+    #bus.write_byte_data(devAddr, MPU6050_RA_GYRO_CONFIG, 0b00011000) # 0b00000000 hardcoded bit see doc
 
 
 def setFullScaleAccelRange (myRange):
-    bus.write_byte_data(devAddr, MPU6050_RA_ACCEL_CONFIG, 0b00011000) # 0b00000000 hardcoded bit see doc
+    writeBits(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_AFS_SEL_BIT, MPU6050_ACONFIG_AFS_SEL_LENGTH, myRange)
 
+    #bus.write_byte_data(devAddr, MPU6050_RA_ACCEL_CONFIG, 0b00011000) # 0b00000000 hardcoded bit see doc
+
+def selfTest():
+    setAccelXSelfTest(False)
+    xOff = getAccelXSelfTest()
+    setAccelXSelfTest(True)
+    xOn = getAccelXSelfTest()
+    X = xOn - xOff
+
+    setAccelYSelfTest(False)
+    yOff = getAccelYSelfTest()
+    setAccelYSelfTest(True)
+    yOn = getAccelYSelfTest()
+    Y = yOn - yOff
+
+    setAccelZSelfTest(False)
+    zOff = getAccelZSelfTest()
+    setAccelZSelfTest(True)
+    zOn = getAccelZSelfTest()
+    Z = zOn - zOff
+
+    return X, Y, Z
+
+
+def getAccelXSelfTest():
+    bit_buffer = readBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_XA_ST_BIT)
+    return bit_buffer[0]
+
+
+def setAccelXSelfTest(enabled):
+    writeBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_XA_ST_BIT, enabled)
+
+
+def getAccelYSelfTest():
+    bit_buffer = readBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_YA_ST_BIT)
+    return bit_buffer[0]
+
+
+def setAccelYSelfTest(enabled):
+    writeBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_YA_ST_BIT, enabled)
+
+
+def getAccelZSelfTest():
+    bit_buffer = readBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_ZA_ST_BIT)
+    return bit_buffer[0]
+
+
+def setAccelZSelfTest(enabled):
+    writeBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_ZA_ST_BIT, enabled)
 
 
 def getMotion9 ():
@@ -434,7 +487,38 @@ def getMotion9 ():
     return d
 
 
+def readBit(addr, regAddr, bitStart):
+    b = readBits(addr, regAddr, bitStart, 1)
+    return b
+
+
+def readBits(addr, regAddr, bitStart, length):
+    b = bus.read_byte_data(addr, regAddr)
+    if b != 0:
+        mask = ((1 << length) - 1) << (bitStart - length + 1)
+        b &= mask
+        b >>= (bitStart - length + 1)
+    return b
+
+
+def writeBit (addr,regAddr, bitNum, data):
+    writeBits(addr, regAddr, bitNum, 1, data)
+
+
+def writeBits (addr, regAddr, bitStart, length, data):
+    b = bus.read_byte_data(addr, regAddr)
+    if b != 0:
+        mask = ((1 << length) - 1) << (bitStart - length + 1)
+        data <<= (bitStart - length + 1) # shift data into correct position
+        data &= mask # zero all non-important bits in data
+        b &= ~mask # zero all important bits in existing byte
+        b |= data # combine data with existing byte
+        bus.write_byte_data(addr, regAddr, b)
+    else:
+        return False
+
 def main():
+
     initialise()
     for i in range(10000):
         data = getMotion9()
