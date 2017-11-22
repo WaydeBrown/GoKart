@@ -1,14 +1,14 @@
 # see I2C devices terminal: sudo i2cdetect -y 1
 # I2C number 68
 
-import MPU_9150_lib as MPU
-import matplotlib.pyplot as plt
 from time import sleep
+import matplotlib.pyplot as plt
+import MPU_9150_lib as MPU
 
 def main():
     MPU.initialise()
     ys = []
-    plt.axis([0,100,0,300])
+    plt.axis([0, 100, 0, 300])
     plt.ion()
 
     for i in range(100):
@@ -25,8 +25,6 @@ def main():
                 "mz: " + str(data["mz"]) + "\t\t"
         plt.plot(ys)
         plt.pause(0.05)
-        i += 1
-
 
 if __name__ == "__main__":
     main()
