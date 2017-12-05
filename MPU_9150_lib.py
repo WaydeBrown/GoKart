@@ -4,7 +4,6 @@
 
 import smbus
 from time import sleep
-from machine import i2c
 
 
 
@@ -17,6 +16,7 @@ bus = smbus.SMBus(DEVICE_BUS)
 
 # Magnetometer Registers
 MPU9150_RA_MAG_ADDRESS =	        0x0C
+MPU9150_RA_MAG_STATUS = 		    0x02
 MPU9150_RA_MAG_XOUT_L = 		    0x03
 MPU9150_RA_MAG_XOUT_H =		0x04
 MPU9150_RA_MAG_YOUT_L =		0x05
@@ -415,21 +415,72 @@ def setFullScaleAccelRange (myRange):
 
 def selfTest():
     setAccelXSelfTest(False)
-    xOff = getAccelXSelfTest()
+    xOff = readBits(devAddr, 0x0D, 6, 3)
     setAccelXSelfTest(True)
-    xOn = getAccelXSelfTest()
+    xOn = readBits(devAddr, 0x0D, 6, 3)
+    print xOn
+    print xOff
+
     X = xOn - xOff
 
     setAccelYSelfTest(False)
-    yOff = getAccelYSelfTest()
+    yOff = readBits(devAddr, 0x0E, 6, 3)
     setAccelYSelfTest(True)
-    yOn = getAccelYSelfTest()
+    yOn = readBits(devAddr, 0x0E, 6, 3)
+
+    print yOn
+    print yOff
+
     Y = yOn - yOff
 
     setAccelZSelfTest(False)
-    zOff = getAccelZSelfTest()
+    zOff = readBits(devAddr, 0x0D, 6, 3)
     setAccelZSelfTest(True)
-    zOn = getAccelZSelfTest()
+    zOn = readBits(devAddr, 0x0D, 6, 3)
+
+    print zOn
+    print zOff
+
+    Z = zOn - zOff
+
+    return X, Y, Z
+
+
+def selfTest2():
+    setAccelXSelfTest(False)
+    # xOff = getAccelXSelfTest()
+    xOff = getMotion9()["ax"]
+    setAccelXSelfTest(True)
+    # xOn = getAccelXSelfTest()
+    xOn = getMotion9()["ax"]
+
+    print xOn
+    print xOff
+
+    X = xOn - xOff
+
+    setAccelYSelfTest(False)
+    # yOff = getAccelYSelfTest()
+    yOff = getMotion9()["ay"]
+    setAccelYSelfTest(True)
+    # yOn = getAccelYSelfTest()
+    yOn = getMotion9()["ay"]
+
+    print yOn
+    print yOff
+
+    Y = yOn - yOff
+
+    setAccelZSelfTest(False)
+    # zOff = getAccelZSelfTest()
+    zOff = getMotion9()["az"]
+    setAccelZSelfTest(True)
+    # zOn = getAccelZSelfTest()
+    zOn = getMotion9()["az"]
+
+    print zOn
+    print zOff
+
     Z = zOn - zOff
 
     return X, Y, Z
@@ -437,7 +488,7 @@ def selfTest():
 
 def getAccelXSelfTest():
     bit_buffer = readBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_XA_ST_BIT)
-    return bit_buffer[0]
+    return bit_buffer
 
 
 def setAccelXSelfTest(enabled):
@@ -446,7 +497,7 @@ def setAccelXSelfTest(enabled):
 
 def getAccelYSelfTest():
     bit_buffer = readBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_YA_ST_BIT)
-    return bit_buffer[0]
+    return bit_buffer
 
 
 def setAccelYSelfTest(enabled):
@@ -455,14 +506,14 @@ def setAccelYSelfTest(enabled):
 
 def getAccelZSelfTest():
     bit_buffer = readBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_ZA_ST_BIT)
-    return bit_buffer[0]
+    return bit_buffer
 
 
 def setAccelZSelfTest(enabled):
     writeBit(devAddr, MPU6050_RA_ACCEL_CONFIG, MPU6050_ACONFIG_ZA_ST_BIT, enabled)
 
 
-def getMotion9 ():
+def getMotion9():
     bit_buffer = bus.read_i2c_block_data(devAddr, MPU6050_RA_ACCEL_XOUT_H, 14)
     d = dict()
     d["ax"] = (bit_buffer[0] << 8) | bit_buffer[1]
@@ -474,10 +525,12 @@ def getMotion9 ():
 
     # read mag
     bus.write_byte_data(devAddr, MPU6050_RA_INT_PIN_CFG, 0x02) # set i2c bypass enable pin to true to access magnetometer
-    sleep(0.01)
+    #while readBit(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_STATUS, 0) == 0:
+    #    pass
 
     bus.write_byte_data(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x01) # enable the magnetometer
-    sleep(0.01)
+    while readBit(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_STATUS, 0) == 0:
+        pass
 
     bit_buffer = bus.read_i2c_block_data(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_XOUT_L, 6)
     d["mx"] = (bit_buffer[1] << 8) | bit_buffer[0]
@@ -485,6 +538,34 @@ def getMotion9 ():
     d["mz"] = (bit_buffer[5] << 8) | bit_buffer[4]
 
     return d
+
+def getMotion9_str():
+    bit_buffer = bus.read_i2c_block_data(devAddr, MPU6050_RA_ACCEL_XOUT_H, 14)
+
+    val = range(9)
+    val[0] = (bit_buffer[0] << 8) | bit_buffer[1]
+    val[1] = (bit_buffer[2] << 8) | bit_buffer[3]
+    val[2] = (bit_buffer[4] << 8) | bit_buffer[5]
+
+    val[3] = (bit_buffer[8] << 8) | bit_buffer[9]
+    val[4] = (bit_buffer[10] << 8) | bit_buffer[11]
+    val[5] = (bit_buffer[12] << 8) | bit_buffer[13]
+
+    # read mag
+    bus.write_byte_data(devAddr, MPU6050_RA_INT_PIN_CFG, 0x02) # set i2c bypass enable pin to true to access magnetometer
+    #while readBit(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_STATUS, 0) == 0:
+    #    pass
+
+    bus.write_byte_data(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x01) # enable the magnetometer
+    while readBit(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_STATUS, 0) == 0:
+        pass
+
+    bit_buffer = bus.read_i2c_block_data(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_XOUT_L, 6)
+    val[6] = (bit_buffer[1] << 8) | bit_buffer[0]
+    val[7] = (bit_buffer[3] << 8) | bit_buffer[2]
+    val[8] = (bit_buffer[5] << 8) | bit_buffer[4]
+
+    return ",".join([str(v) for v in val])
 
 
 def readBit(addr, regAddr, bitStart):
@@ -507,19 +588,16 @@ def writeBit (addr,regAddr, bitNum, data):
 
 def writeBits (addr, regAddr, bitStart, length, data):
     b = bus.read_byte_data(addr, regAddr)
-    if b != 0:
-        mask = ((1 << length) - 1) << (bitStart - length + 1)
-        data <<= (bitStart - length + 1) # shift data into correct position
-        data &= mask # zero all non-important bits in data
-        b &= ~mask # zero all important bits in existing byte
-        b |= data # combine data with existing byte
-        bus.write_byte_data(addr, regAddr, b)
-    else:
-        return False
+    mask = ((1 << length) - 1) << (bitStart - length + 1)
+    data <<= (bitStart - length + 1) # shift data into correct position
+    data &= mask # zero all non-important bits in data
+    b &= ~mask # zero all important bits in existing byte
+    b |= data # combine data with existing byte
+    bus.write_byte_data(addr, regAddr, b)
 
-def main():
 
-    initialise()
+
+def loopSensors():
     for i in range(10000):
         data = getMotion9()
         print   "ax: " + str(data["ax"]) + "\t\t" + \
@@ -533,6 +611,18 @@ def main():
                 "mz: " + str(data["mz"]) + "\t\t"
 
         i += 1
+
+def main():
+
+    initialise()
+    selfTest2()
+    X, Y, Z = selfTest2()
+    print   "X: " + str(X) + "\t" \
+            "Y: " + str(Y) + "\t" \
+            "Z: " + str(Z)
+
+
+
 
 
 if __name__ == "__main__":
